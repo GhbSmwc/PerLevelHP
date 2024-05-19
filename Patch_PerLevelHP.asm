@@ -143,7 +143,7 @@
 org $00F5D5
 	autoclean JML SmallKillHijack
 	
-org $01C4AC
+org $01C4BF
 	autoclean JML MushroomHijack
 freecode
 
@@ -196,20 +196,14 @@ SmallKillHijack:
 		endif
 		JML $00F606
 MushroomHijack:
-	;^$01C4AC, yes the beginning of the general powerup routine.
+	;^$01C4BF, yes the beginning of the general powerup routine.
 	; Different compared to the metroid HP patch/player HP meter that I adopted
 	; This is because of the handling of a table $01C510 to determine when
 	; grabbing a powerup should instead be placed in the item box (e.g. big
 	; mario grabbing a mushroom).
-	;JSR CODE_01A80F			;$01C4AC	|\ 
-	;BCC Return01C4AB			;$01C4AF	||
-	.RestoreCollision
-		;JSR.w $01A80F
-		;BCC .Return01C4AB
-		JSL $01A7DC
-		BCC .Return01C4AB
+	;LDA.w $1540,X				;$01C4BF	|| 
+	;CMP.b #$18				;$01C4C2	||
 	.CheckIfHPMode
-		wdm
 		LDA !Freeram_PlayerHPMode
 		BEQ .ReturnToSMWCode
 	
@@ -222,7 +216,7 @@ MushroomHijack:
 		endif
 		LDA !Freeram_PlayerHP
 		CMP !Freeram_PlayerMaxHP
-		BCS .ReturnToSMWCode
+		BCS .ReturnToSMWCode		;If full health, do vanilla things, otherwise heal and maybe grow the player.
 		CLC
 		if !Setting_HealthSize == 0
 			ADC.b #!Setting_DefaultMushroomHeal
@@ -251,7 +245,7 @@ MushroomHijack:
 		;Also makes it so that if the player transforms OR heals,
 		;it won't be added to item box, otherwise if there is any affect
 		;on the player, it is consumed.
-		LDA $19
+		LDA $19		;Grow the player if small.
 		BEQ ..Grow
 		..PointsAndSFX
 			JML $01C56F ;Only give points and SFX, no other effects
@@ -265,7 +259,6 @@ MushroomHijack:
 			BRA ..PointsAndSFX
 		
 	.ReturnToSMWCode
-		SEP #$30
-		JML $01C4B1 ;powerup animation/item box ($01C4CD)
-	.Return01C4AB
-		JML $01C4AB
+		LDA $1540|!addr,x
+		CMP #$18
+		JML $01C4C4
