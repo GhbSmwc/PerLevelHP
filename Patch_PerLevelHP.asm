@@ -144,7 +144,7 @@ org $00F5D5
 	autoclean JML SmallKillHijack
 	
 org $01C4BF
-	autoclean JML MushroomHijack
+	autoclean JML PowerupHijack
 freecode
 
 
@@ -195,12 +195,16 @@ SmallKillHijack:
 			SEP #$20
 		endif
 		JML $00F606
-MushroomHijack:
+PowerupHijack:
 	;^$01C4BF, yes the beginning of the general powerup routine.
 	; Different compared to the metroid HP patch/player HP meter that I adopted
 	; This is because of the handling of a table $01C510 to determine when
 	; grabbing a powerup should instead be placed in the item box (e.g. big
 	; mario grabbing a mushroom).
+	;
+	; Also if Super/big Mario grabs a flower or a feather, a Mushroom
+	; is added to the item box, allowing the player to heal from a free mushroom
+	; which is weird that a "mushroom is extracted from the player".
 	;LDA.w $1540,X				;$01C4BF	|| 
 	;CMP.b #$18				;$01C4C2	||
 	.CheckIfHPMode
@@ -208,8 +212,13 @@ MushroomHijack:
 		BEQ .ReturnToSMWCode
 	
 		LDA !9E,x
-		CMP #$74
-		BNE .ReturnToSMWCode
+		CMP #$74			;>$74 = mushroom
+		BEQ .MushroomHeal
+		CMP #$75
+		BEQ .FlowerFeatherNoItemBox
+		CMP #$77
+		BEQ .FlowerFeatherNoItemBox
+		BRA .ReturnToSMWCode
 	.MushroomHeal
 		if !Setting_HealthSize != 0
 			REP #$20
@@ -240,7 +249,7 @@ MushroomHijack:
 			STZ !14C8,x
 		;Here is under the conditions the player is not at full health
 		;and then healed. Prevent healing AND added to item box,
-		;allowing the player to repeatedly heal.
+		;allowing the player to infinitely heal.
 		;
 		;Also makes it so that if the player transforms OR heals,
 		;it won't be added to item box, otherwise if there is any affect
@@ -257,8 +266,29 @@ MushroomHijack:
 			STA $1496|!addr
 			STA $9D
 			BRA ..PointsAndSFX
-		
+	.FlowerFeatherNoItemBox
+		;A HP version of $01C510
+		;Makes so that big Mario grabbing a flower or feather not to place a mushroom in the item box.
+		STZ !14C8,x			;>Erase sprite
+		PHB				;>Preserve bank of whatever was in SMW's code
+		PHK				;\Switch bank to whatever this patch's code is in
+		PLB				;/
+		wdm
+		SEC
+		SBC #$74			;>Subtract by $74, so that Mushroom, Flower, Star, and then Feather are mapped to $00-$02.
+		ASL #2				;>Multiply by 4, so each powerup sprite in a sequence is a jump of 4 bytes; %**PPPPPP -> %PPPPPP00
+		ORA $19				;>"Add" (ORA to fill out bits 0 and 1) by player powerup status, which is small, big, cape, and then fire
+		TAY				;>Y_value = (PowerupSpriteNumber*4)+MarioPowerup
+		LDA.w .ItemBoxHPEdition-4,y
+		PLB				;>Restore bank of SMW's code
+		CMP #$00			;>Another case where CMP #$00 is needed, because PLB/LDX/LDY affects the N and Z flags when we need to compare A.
+		JML $01C543
 	.ReturnToSMWCode
 		LDA $1540|!addr,x
 		CMP #$18
 		JML $01C4C4
+	.ItemBoxHPEdition
+		;   SM  BG  CP  FR    <- powerup prior touching an item: small, big, cape, fire
+		db $00,$00,$04,$02   ;>Item box when grabbing a Flower
+		db $00,$00,$00,$00   ;>Item box when grabbing a Star (unused?)
+		db $00,$00,$04,$02   ;>Item box when grabbing a Feather
